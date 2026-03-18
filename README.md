@@ -65,3 +65,10 @@ The objective is to identify distinct user groups to support targeted marketing,
         app_user_clustered_data.csv
     -README.md
     -requirements.txt
+
+
+---
+
+## ✅ Conclusion
+The project successfully segmented users into meaningful behavioral groups without labeled data, enabling actionable insights for business decision-making.
+# App-user-Segmentation-

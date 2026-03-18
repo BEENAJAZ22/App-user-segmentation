@@ -1,217 +1,240 @@
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
 
-# Load dataset
-df = pd.read_csv("../data/app_user_behavior_dataset.csv")
+# ===============================
+# LOAD DATA (FIXED PATH)
+# ===============================
+df = pd.read_csv("data/app_user_behavior_dataset.csv")
 
-# Initial inspection
 print("First 5 rows:")
 print(df.head())
 
-print("\nShape:")
-print(df.shape)
+print("\nShape:", df.shape)
+print("\nColumns:", df.columns)
 
-print("\nColumns:")
-print(df.columns)
-
-# Data info
-print("\nDataset Info:")
-print(df.info())
-
-# Missing values
+# ===============================
+# DATA CLEANING
+# ===============================
 print("\nMissing values before cleaning:")
 print(df.isnull().sum())
 
-# Duplicate rows
-print("\nDuplicate rows:")
-print(df.duplicated().sum())
-
-# Remove duplicates
 df.drop_duplicates(inplace=True)
 
-# Handle missing values
-numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+numeric_cols = df.select_dtypes(include=['int64','float64']).columns
 df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
 
-# Verify cleaning
 print("\nMissing values after cleaning:")
 print(df.isnull().sum())
 
-#EDA
-#statistical summary
+# ===============================
+# EDA
+# ===============================
 print("\nStatistical Summary:")
 print(df.describe())
 
-# DISTRIBUTION OF ENGAGEMENT SCORE
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-plt.figure(figsize=(8,5))
+plt.figure()
 sns.histplot(df["engagement_score"], bins=30, kde=True)
-plt.title("Distribution of Engagement Score")
-plt.xlabel("Engagement Score")
-plt.ylabel("Frequency")
+plt.title("Engagement Score Distribution")
 plt.show()
 
-# DAYS SINCE LAST LOGIN
-plt.figure(figsize=(8,5))
+plt.figure()
 sns.histplot(df["days_since_last_login"], bins=30, kde=True)
-plt.title("Days Since Last Login Distribution")
-plt.xlabel("Days")
-plt.ylabel("Users")
+plt.title("Days Since Last Login")
 plt.show()
 
-#CORRELATION HEATMAP
-# Correlation heatmap (numeric features only)
-plt.figure(figsize=(12,8))
-numeric_df = df.select_dtypes(include=['int64', 'float64'])
+numeric_df = df.select_dtypes(include=['int64','float64'])
+plt.figure(figsize=(10,6))
 sns.heatmap(numeric_df.corr(), cmap="coolwarm")
-plt.title("Feature Correlation Heatmap")
+plt.title("Correlation Heatmap")
 plt.show()
 
-#FEATURE SELECTION
-#checking columns
-print(df.columns)
-
-#FINAL FEATURES
+# ===============================
+# FEATURE SELECTION
+# ===============================
 features = [
-    "sessions_per_week",
-    "avg_session_duration_min",
-    "daily_active_minutes",
-    "feature_clicks_per_session",
-    "notifications_opened_per_week",
-    "in_app_search_count",
-    "pages_viewed_per_session",
-    "support_tickets_raised",
-    "days_since_last_login",
-    "ads_clicked_last_30_days",
-    "content_downloads",
-    "social_shares",
-    "rating_given",
-    "churn_risk_score",
-    "engagement_score",
-    "account_age_days"
+"sessions_per_week","avg_session_duration_min","daily_active_minutes",
+"feature_clicks_per_session","notifications_opened_per_week",
+"in_app_search_count","pages_viewed_per_session","support_tickets_raised",
+"days_since_last_login","ads_clicked_last_30_days","content_downloads",
+"social_shares","rating_given","churn_risk_score",
+"engagement_score","account_age_days"
 ]
 
 X = df[features]
 
-
-#VERIFY FEATURE MATRIX
-print("\nSelected features preview:")
-print(X.head())
-
-print("\nFeature matrix shape:")
-print(X.shape)
-
-
-#DATA SCALING
+# ===============================
+# SCALING
+# ===============================
 from sklearn.preprocessing import StandardScaler
-# Scaling
+
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-print("Scaling completed")
-print(X_scaled[:5])
-
-#ELBOW METHOD
+# ===============================
+# ELBOW METHOD
+# ===============================
 from sklearn.cluster import KMeans
 
 inertia = []
+for k in range(2,11):
+    km = KMeans(n_clusters=k, random_state=42)
+    km.fit(X_scaled)
+    inertia.append(km.inertia_)
 
-K_range = range(2, 11)
-
-for k in K_range:
-    kmeans = KMeans(n_clusters=k, random_state=42)
-    kmeans.fit(X_scaled)
-    inertia.append(kmeans.inertia_)
-
-import matplotlib.pyplot as plt
-
-plt.figure(figsize=(8,5))
-plt.plot(K_range, inertia, marker='o')
-plt.xlabel("Number of Clusters (K)")
+plt.plot(range(2,11), inertia, marker='o')
+plt.title("Elbow Method")
+plt.xlabel("K")
 plt.ylabel("Inertia")
-plt.title("Elbow Method for Optimal K")
 plt.show()
 
-#Fit kmeans model
-# Apply KMeans with optimal K
+# ===============================
+# CLUSTERING METHODS
+# ===============================
+
+# KMEANS
 kmeans = KMeans(n_clusters=6, random_state=42)
-clusters = kmeans.fit_predict(X_scaled)
+df["kmeans_cluster"] = kmeans.fit_predict(X_scaled)
 
-# Add cluster labels to original dataframe
-df["cluster"] = clusters
+# ===============================
+# HIERARCHICAL (SAFE VERSION)
+# ===============================
+from sklearn.cluster import AgglomerativeClustering
 
-print("Cluster counts:")
-print(df["cluster"].value_counts())
+# Use only a sample to avoid memory crash
+sample_size = 2000
+X_sample = X_scaled[:sample_size]
 
-# Cluster profiling - mean values
-cluster_profile = df.groupby("cluster")[features].mean()
+hc = AgglomerativeClustering(n_clusters=6)
+hc_labels = hc.fit_predict(X_sample)
 
-print("\nCluster-wise feature averages:")
+# Create full column with default value
+df["hc_cluster"] = -1
+
+# Assign cluster labels only for sample
+df.loc[:sample_size-1, "hc_cluster"] = hc_labels
+
+print("\nHierarchical Cluster Counts (sampled):")
+print(pd.Series(hc_labels).value_counts())
+
+# DBSCAN
+from sklearn.cluster import DBSCAN
+dbscan = DBSCAN(eps=1.2, min_samples=10)
+df["dbscan_cluster"] = dbscan.fit_predict(X_scaled)
+
+# GMM
+from sklearn.mixture import GaussianMixture
+gmm = GaussianMixture(n_components=6, random_state=42)
+df["gmm_cluster"] = gmm.fit_predict(X_scaled)
+
+# ===============================
+# CLUSTER DISTRIBUTION GRAPH
+# ===============================
+plt.figure(figsize=(10,6))
+
+df["kmeans_cluster"].value_counts().sort_index().plot(label="KMeans")
+df["hc_cluster"].value_counts().sort_index().plot(label="Hierarchical")
+df["gmm_cluster"].value_counts().sort_index().plot(label="GMM")
+
+plt.legend()
+plt.title("Cluster Size Comparison")
+plt.show()
+
+# ===============================
+# SILHOUETTE SCORE
+# ===============================
+from sklearn.metrics import silhouette_score
+
+scores = {}
+
+scores["KMeans"] = silhouette_score(X_scaled, df["kmeans_cluster"])
+scores["Hierarchical"] = silhouette_score(X_scaled, df["hc_cluster"])
+scores["GMM"] = silhouette_score(X_scaled, df["gmm_cluster"])
+
+# DBSCAN SAFE HANDLING
+mask = df["dbscan_cluster"] != -1
+
+if len(set(df.loc[mask,"dbscan_cluster"])) > 1:
+    scores["DBSCAN"] = silhouette_score(
+        X_scaled[mask],
+        df.loc[mask,"dbscan_cluster"]
+    )
+else:
+    scores["DBSCAN"] = np.nan
+
+print("\nSilhouette Scores:", scores)
+
+# ===============================
+# SILHOUETTE GRAPH
+# ===============================
+plt.bar(scores.keys(), scores.values())
+plt.title("Silhouette Comparison")
+plt.show()
+
+# ===============================
+# SUMMARY TABLE
+# ===============================
+summary = pd.DataFrame({
+"Method":["KMeans","Hierarchical","DBSCAN","GMM"],
+"Clusters":[
+df["kmeans_cluster"].nunique(),
+df["hc_cluster"].nunique(),
+df["dbscan_cluster"].nunique(),
+df["gmm_cluster"].nunique()
+],
+"Silhouette":[
+scores["KMeans"],
+scores["Hierarchical"],
+scores["DBSCAN"],
+scores["GMM"]
+]
+})
+
+print(summary)
+
+# ===============================
+# FINAL KMEANS ANALYSIS
+# ===============================
+cluster_profile = df.groupby("kmeans_cluster")[features].mean()
+cluster_counts = df["kmeans_cluster"].value_counts()
+
+cluster_profile["user_count"] = cluster_counts
+
 print(cluster_profile)
 
-cluster_counts = df["cluster"].value_counts().sort_index()
-
-print("\nUsers per cluster:")
-print(cluster_counts)
-
-cluster_summary = cluster_profile.copy()
-cluster_summary["user_count"] = cluster_counts
-
-print("\nCluster Summary:")
-print(cluster_summary)
-
-#FINAL CLUSTER NAMING
+# ===============================
+# CLUSTER NAMES
+# ===============================
 cluster_names = {
-    0: "New Active Users",
-    1: "Long-Term Regular Users",
-    2: "Established Balanced Users",
-    3: "Low-Volume Stable Users",
-    4: "Consistent High-Activity Users",
-    5: "Deep Session Users"
+0:"New Active Users",
+1:"Long-Term Regular Users",
+2:"Established Balanced Users",
+3:"Low-Volume Stable Users",
+4:"Consistent High-Activity Users",
+5:"Deep Session Users"
 }
 
-df["cluster_label"] = df["cluster"].map(cluster_names)
-print(numeric_df)
+df["cluster_label"] = df["kmeans_cluster"].map(cluster_names)
 
-#import PCA
+# ===============================
+# PCA VISUALIZATION
+# ===============================
 from sklearn.decomposition import PCA
 
-#APPLY PCA ON SCALED DATA
 pca = PCA(n_components=2)
-pca_components = pca.fit_transform(X_scaled)
+pca_data = pca.fit_transform(X_scaled)
 
-#CREATE PCA DATAFRAME
-pca_df = pd.DataFrame(
-    data=pca_components,
-    columns=["PC1", "PC2"]
-)
+pca_df = pd.DataFrame(pca_data, columns=["PC1","PC2"])
+pca_df["cluster"] = df["cluster_label"]
 
-pca_df["cluster_label"] = df["cluster_label"]
-
-#PLOT PCA CLUSTERS
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-plt.figure(figsize=(10,6))
-sns.scatterplot(
-    x="PC1",
-    y="PC2",
-    hue="cluster_label",
-    data=pca_df,
-    palette="Set2",
-    alpha=0.7
-)
-
-plt.title("PCA Visualization of User Clusters")
-plt.xlabel("Principal Component 1")
-plt.ylabel("Principal Component 2")
-plt.legend(title="User Segment")
+sns.scatterplot(x="PC1", y="PC2", hue="cluster", data=pca_df)
+plt.title("PCA Clusters")
 plt.show()
 
+# ===============================
+# SAVE OUTPUT
+# ===============================
+df.to_csv("outputs/app_user_clustered_data.csv", index=False)
 
-
-# Save final clustered data
-df.to_csv("../outputs/app_user_clustered_data.csv", index=False)
-
-print("Final clustered data saved successfully!")
+print("SUCCESS: File saved")
